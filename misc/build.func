@@ -15,13 +15,13 @@ variables() {
   CT_TYPE=${var_unprivileged:-$CT_TYPE}
 }
 
-source <(curl -fsSL ttps://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/api.func)
+source <(curl -fsSL https://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/api.func)
 
 if command -v curl >/dev/null 2>&1; then
-  source <(curl -fsSL ttps://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/core.func)
+  source <(curl -fsSL https://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/core.func)
   load_functions
 elif command -v wget >/dev/null 2>&1; then
-  source <(wget -qO- ttps://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/core.func)
+  source <(wget -qO- https://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/core.func)
   load_functions
 fi
 # This function enables error handling in the script by setting options and defining a trap for the ERR signal.
@@ -32,7 +32,7 @@ catch_errors() {
 
 # This function is called when an error occurs. It receives the exit code, line number, and command that caused the error, and displays an error message.
 error_handler() {
-  source /dev/stdin <<<$(curl -fsSL ttps://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/api.func)
+  source /dev/stdin <<<$(curl -fsSL https://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/api.func)
   printf "\e[?25h"
   local exit_code="$?"
   local line_number="$1"
@@ -1355,7 +1355,7 @@ description() {
     cat <<EOF
 <div align='center'>
   <a href='https://Helper-Scripts.com' target='_blank' rel='noopener noreferrer'>
-    <img src='ttps://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/images/logo-81x112.png' alt='Logo' style='width:81px;height:112px;'/>
+    <img src='https://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/images/logo-81x112.png' alt='Logo' style='width:81px;height:112px;'/>
   </a>
 
   <h2 style='font-size: 24px; margin: 20px 0;'>${APP} LXC</h2>
