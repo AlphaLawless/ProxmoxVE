@@ -15,6 +15,26 @@ update_os
 
 PG_VERSION="17" setup_postgresql
 
+while true; do
+  read -rp "Which webserver do you want to use? [1=Apache (default), 2=Nginx]: " WEBSERVER_CHOICE
+  case "$WEBSERVER_CHOICE" in
+  2)
+    WEBSERVER="nginx"
+    WEBSERVER_PKG="zabbix-nginx-conf"
+    break
+    ;;
+  "" | 1)
+    WEBSERVER="apache"
+    WEBSERVER_PKG="zabbix-apache-conf"
+    break
+    ;;
+  *)
+    echo "Invalid choice. Please enter 1 or 2."
+    ;;
+  esac
+done
+msg_ok "Selected $WEBSERVER"
+
 msg_info "Installing Zabbix"
 cd /tmp
 curl -fsSL "$(curl -fsSL https://repo.zabbix.com/zabbix/ |
@@ -23,7 +43,7 @@ curl -fsSL "$(curl -fsSL https://repo.zabbix.com/zabbix/ |
   -o /tmp/zabbix-release_latest+debian13_all.deb
 $STD dpkg -i /tmp/zabbix-release_latest+debian13_all.deb
 $STD apt update
-$STD apt install -y zabbix-server-pgsql zabbix-frontend-php php8.4-pgsql zabbix-apache-conf zabbix-sql-scripts
+$STD apt install -y zabbix-server-pgsql zabbix-frontend-php php8.4-pgsql $WEBSERVER_PKG zabbix-sql-scripts
 msg_ok "Installed Zabbix"
 
 while true; do
@@ -89,6 +109,14 @@ sed -i "s/^DBUser=.*/DBUser=$DB_USER/" /etc/zabbix/zabbix_server.conf
 sed -i "s/^# DBPassword=.*/DBPassword=$DB_PASS/" /etc/zabbix/zabbix_server.conf
 msg_ok "Set up PostgreSQL"
 
+if [ "$WEBSERVER" = "nginx" ]; then
+  msg_info "Configuring Nginx"
+  sed -i 's/# listen 8080;/listen 80;/' /etc/zabbix/nginx.conf
+  sed -i 's/# server_name example.com;/server_name _;/' /etc/zabbix/nginx.conf
+  ln -s /etc/zabbix/nginx.conf /etc/nginx/sites-enabled/zabbix.conf
+  msg_ok "Configured Nginx"
+fi
+
 msg_info "Configuring Fping"
 if command -v fping >/dev/null 2>&1; then
   FPING_PATH=$(command -v fping)
@@ -109,7 +137,7 @@ else
 fi
 
 systemctl restart zabbix-server
-systemctl enable -q --now zabbix-server $AGENT_SERVICE apache2
+systemctl enable -q --now zabbix-server $AGENT_SERVICE $WEBSERVER
 msg_ok "Started Services"
 
 motd_ssh

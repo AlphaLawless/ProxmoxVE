@@ -41,15 +41,31 @@ function update_script() {
     AGENT_SERVICE="zabbix-agent"
   fi
 
+  if systemctl is-active --quiet nginx; then
+    WEBSERVER="nginx"
+    WEBSERVER_PKG="zabbix-nginx-conf"
+  elif systemctl is-active --quiet apache2; then
+    WEBSERVER="apache2"
+    WEBSERVER_PKG="zabbix-apache-conf"
+  else
+    msg_error "No supported webserver (nginx or apache2) is running!"
+    exit
+  fi
+
   msg_info "Stopping Services"
   systemctl stop zabbix-server
   systemctl stop "$AGENT_SERVICE"
+  systemctl stop "$WEBSERVER"
   msg_ok "Stopped Services"
 
   msg_info "Updating Zabbix"
   mkdir -p /opt/zabbix-backup/
   cp /etc/zabbix/zabbix_server.conf /opt/zabbix-backup/
-  cp /etc/apache2/conf-enabled/zabbix.conf /opt/zabbix-backup/
+  if [ "$WEBSERVER" = "apache2" ]; then
+    cp /etc/apache2/conf-enabled/zabbix.conf /opt/zabbix-backup/
+  else
+    cp /etc/zabbix/nginx.conf /opt/zabbix-backup/
+  fi
   cp -R /usr/share/zabbix/ /opt/zabbix-backup/
 
   rm -Rf /etc/apt/sources.list.d/zabbix.list
@@ -61,7 +77,7 @@ function update_script() {
   $STD dpkg -i zabbix-release_latest+debian13_all.deb
   $STD apt update
 
-  $STD apt install --only-upgrade zabbix-server-pgsql zabbix-frontend-php php8.4-pgsql
+  $STD apt install --only-upgrade zabbix-server-pgsql zabbix-frontend-php php8.4-pgsql $WEBSERVER_PKG
 
   if [ "$AGENT_SERVICE" = "zabbix-agent2" ]; then
     $STD apt install --only-upgrade zabbix-agent2 zabbix-agent2-plugin-postgresql
@@ -86,7 +102,7 @@ function update_script() {
   msg_info "Starting Services"
   systemctl start zabbix-server
   systemctl start "$AGENT_SERVICE"
-  systemctl restart apache2
+  systemctl restart "$WEBSERVER"
   msg_ok "Started Services"
 
   msg_info "Cleaning Up"
