@@ -980,7 +980,7 @@ install_script() {
       header_info
       echo -e "${INFO}${HOLD} ${GN}Using Config File on node $PVEHOST_NAME${CL}"
       METHOD="config_file"
-      source <(curl -fsSL ttps://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/config-file.func)
+      source <(curl -fsSL https://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/config-file.func)
       config_file
       break
       ;;
@@ -1051,7 +1051,7 @@ check_container_storage() {
 }
 
 start() {
-  source <(curl -fsSL ttps://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/tools.func)
+  source <(curl -fsSL https://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/tools.func)
   if command -v pveversion >/dev/null 2>&1; then
     install_script
   else
@@ -1113,9 +1113,9 @@ build_container() {
   TEMP_DIR=$(mktemp -d)
   pushd "$TEMP_DIR" >/dev/null
   if [ "$var_os" == "alpine" ]; then
-    export FUNCTIONS_FILE_PATH="$(curl -fsSL ttps://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/alpine-install.func)"
+    export FUNCTIONS_FILE_PATH="$(curl -fsSL https://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/alpine-install.func)"
   else
-    export FUNCTIONS_FILE_PATH="$(curl -fsSL ttps://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/install.func)"
+    export FUNCTIONS_FILE_PATH="$(curl -fsSL https://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/install.func)"
   fi
 
   export DIAGNOSTICS="$DIAGNOSTICS"
@@ -1150,7 +1150,7 @@ build_container() {
     $PW
   "
   # This executes create_lxc.sh and creates the container and .conf file
-  bash -c "$(curl -fsSL ttps://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/create_lxc.sh)" $?
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/misc/create_lxc.sh)" $?
 
   LXC_CONFIG="/etc/pve/lxc/${CTID}.conf"
 
@@ -1343,7 +1343,7 @@ EOF'
   fi
   msg_ok "Customized LXC Container"
 
-  lxc-attach -n "$CTID" -- bash -c "$(curl -fsSL ttps://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/install/${var_install}.sh)"
+  lxc-attach -n "$CTID" -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/add-zabbix-nginx-install/install/${var_install}.sh)"
 }
 
 # This function sets the description of the container.
