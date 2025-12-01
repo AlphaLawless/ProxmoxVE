@@ -84,6 +84,66 @@ function cleanup() {
   rm -rf $TEMP_DIR
 }
 
+function get_freebsd_mirror() {
+  msg_info "Detecting best FreeBSD mirror for your region"
+
+  local COUNTRY=$(curl -s --max-time 3 https://ipapi.co/country/ 2>/dev/null)
+
+  if [ -z "$COUNTRY" ]; then
+    COUNTRY=$(curl -s --max-time 3 https://ipinfo.io/country 2>/dev/null)
+  fi
+
+  if [ -z "$COUNTRY" ]; then
+    COUNTRY="US"
+  fi
+
+  local MIRROR
+  case $COUNTRY in
+    BR)
+      MIRROR="https://ftp.br.freebsd.org/pub/FreeBSD"
+      msg_ok "Using Brazilian mirror (ftp.br.freebsd.org)"
+      ;;
+    AR|UY|CL|PY)
+      MIRROR="https://ftp.ar.freebsd.org/pub/FreeBSD"
+      msg_ok "Using Argentina mirror (ftp.ar.freebsd.org)"
+      ;;
+    DE|AT|CH)
+      MIRROR="https://ftp.de.freebsd.org/pub/FreeBSD"
+      msg_ok "Using German mirror (ftp.de.freebsd.org)"
+      ;;
+    GB|IE)
+      MIRROR="https://ftp.uk.freebsd.org/pub/FreeBSD"
+      msg_ok "Using UK mirror (ftp.uk.freebsd.org)"
+      ;;
+    FR|BE|LU)
+      MIRROR="https://ftp.fr.freebsd.org/pub/FreeBSD"
+      msg_ok "Using French mirror (ftp.fr.freebsd.org)"
+      ;;
+    JP|KR)
+      MIRROR="https://ftp.jp.freebsd.org/pub/FreeBSD"
+      msg_ok "Using Japanese mirror (ftp.jp.freebsd.org)"
+      ;;
+    CN|TW|HK)
+      MIRROR="https://ftp.cn.freebsd.org/pub/FreeBSD"
+      msg_ok "Using Chinese mirror (ftp.cn.freebsd.org)"
+      ;;
+    AU|NZ)
+      MIRROR="https://ftp.au.freebsd.org/pub/FreeBSD"
+      msg_ok "Using Australian mirror (ftp.au.freebsd.org)"
+      ;;
+    ZA)
+      MIRROR="https://ftp.za.freebsd.org/pub/FreeBSD"
+      msg_ok "Using South African mirror (ftp.za.freebsd.org)"
+      ;;
+    *)
+      MIRROR="https://download.freebsd.org"
+      msg_ok "Using main FreeBSD mirror (download.freebsd.org)"
+      ;;
+  esac
+
+  echo "$MIRROR"
+}
+
 TEMP_DIR=$(mktemp -d)
 pushd $TEMP_DIR >/dev/null
 function send_line_to_vm() {
@@ -279,17 +339,26 @@ function default_settings() {
   echo -e "${DGN}Using LAN VLAN: ${BGN}Default${CL}"
   echo -e "${DGN}Using LAN MAC Address: ${BGN}${MAC}${CL}"
 
-  if (whiptail --backtitle "Proxmox VE Helper Scripts" --title "WAN BRIDGE CONFIGURATION" --yesno "Do you want to configure a separate WAN bridge?\n\nSelect 'Yes' for traditional firewall setup (2 interfaces)\nSelect 'No' for proxy/VPN/single interface setup" 12 58); then
-    echo -e "${DGN}Using WAN MAC Address: ${BGN}${WAN_MAC}${CL}"
-    if ! grep -q "^iface ${WAN_BRG}" /etc/network/interfaces; then
-      msg_error "Bridge '${WAN_BRG}' does not exist in /etc/network/interfaces"
-      exit
+  if NETWORK_MODE=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "NETWORK CONFIGURATION" --radiolist --cancel-button Exit-Script \
+    "Choose network setup mode for OPNsense:\n" 14 70 2 \
+    "dual" "Dual Interface (Traditional Firewall/Router)" ON \
+    "single" "Single Interface (Proxy/VPN/IDS Server)" OFF \
+    3>&1 1>&2 2>&3); then
+    if [ "$NETWORK_MODE" = "dual" ]; then
+      echo -e "${DGN}Network Mode: ${BGN}Dual Interface (Firewall)${CL}"
+      echo -e "${DGN}Using WAN MAC Address: ${BGN}${WAN_MAC}${CL}"
+      if ! grep -q "^iface ${WAN_BRG}" /etc/network/interfaces; then
+        msg_error "Bridge '${WAN_BRG}' does not exist in /etc/network/interfaces"
+        exit
+      else
+        echo -e "${DGN}Using WAN Bridge: ${BGN}${WAN_BRG}${CL}"
+      fi
     else
-      echo -e "${DGN}Using WAN Bridge: ${BGN}${WAN_BRG}${CL}"
+      echo -e "${DGN}Network Mode: ${BGN}Single Interface (Proxy/VPN/IDS)${CL}"
+      WAN_BRG=""
     fi
   else
-    echo -e "${DGN}WAN Bridge: ${BGN}Disabled (Single interface mode)${CL}"
-    WAN_BRG=""
+    exit-script
   fi
   echo -e "${DGN}Using Interface MTU Size: ${BGN}Default${CL}"
   echo -e "${DGN}Start VM when completed: ${BGN}yes${CL}"
@@ -572,12 +641,12 @@ fi
 msg_ok "Using ${CL}${BL}$STORAGE${CL} ${GN}for Storage Location."
 msg_ok "Virtual Machine ID is ${CL}${BL}$VMID${CL}."
 msg_info "Retrieving the URL for the OPNsense Qcow2 Disk Image"
-URL=https://download.freebsd.org/releases/VM-IMAGES/14.2-RELEASE/amd64/Latest/FreeBSD-14.2-RELEASE-amd64.qcow2.xz
-sleep 2
-msg_ok "${CL}${BL}${URL}${CL}"
+MIRROR=$(get_freebsd_mirror)
+URL="${MIRROR}/releases/VM-IMAGES/14.2-RELEASE/amd64/Latest/FreeBSD-14.2-RELEASE-amd64.qcow2.xz"
+msg_ok "Download URL: ${CL}${BL}${URL}${CL}"
 curl -f#SL -o "$(basename "$URL")" "$URL"
 echo -en "\e[1A\e[0K"
-FILE=Fressbsd.qcow2
+FILE=FreeBSD.qcow2
 unxz -cv $(basename $URL) >${FILE}
 msg_ok "Downloaded ${CL}${BL}${FILE}${CL}"
 
