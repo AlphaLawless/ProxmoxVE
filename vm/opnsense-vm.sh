@@ -4,17 +4,17 @@
 # Author: michelroegl-brunner
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 
-source /dev/stdin <<<$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/api.func)
+source /dev/stdin <<<$(curl -fsSL https://raw.githubusercontent.com/AlphaLawless/ProxmoxVE/refs/heads/fix-opnsense-vm/misc/api.func)
 
 function header_info {
   clear
   cat <<"EOF"
-   ____  ____  _   __                        
-  / __ \/ __ \/ | / /_______  ____  ________ 
+   ____  ____  _   __
+  / __ \/ __ \/ | / /_______  ____  ________
  / / / / /_/ /  |/ / ___/ _ \/ __ \/ ___/ _ \
 / /_/ / ____/ /|  (__  )  __/ / / (__  )  __/
-\____/_/   /_/ |_/____/\___/_/ /_/____/\___/ 
-                                                                         
+\____/_/   /_/ |_/____/\___/_/ /_/____/\___/
+
 EOF
 }
 header_info
@@ -623,7 +623,7 @@ DESCRIPTION=$(
       <img src='https://img.shields.io/badge/&#x2615;-Buy us a coffee-blue' alt='spend Coffee' />
     </a>
   </p>
-  
+
   <span style='margin: 0 10px;'>
     <i class="fa fa-github fa-fw" style="color: #f5f5f5;"></i>
     <a href='https://github.com/community-scripts/ProxmoxVE' target='_blank' rel='noopener noreferrer' style='text-decoration: none; color: #00617f;'>GitHub</a>
