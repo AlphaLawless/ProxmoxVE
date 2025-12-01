@@ -278,12 +278,18 @@ function default_settings() {
   fi
   echo -e "${DGN}Using LAN VLAN: ${BGN}Default${CL}"
   echo -e "${DGN}Using LAN MAC Address: ${BGN}${MAC}${CL}"
-  echo -e "${DGN}Using WAN MAC Address: ${BGN}${WAN_MAC}${CL}"
-  if ! grep -q "^iface ${WAN_BRG}" /etc/network/interfaces; then
-    msg_error "Bridge '${WAN_BRG}' does not exist in /etc/network/interfaces"
-    exit
+
+  if (whiptail --backtitle "Proxmox VE Helper Scripts" --title "WAN BRIDGE CONFIGURATION" --yesno "Do you want to configure a separate WAN bridge?\n\nSelect 'Yes' for traditional firewall setup (2 interfaces)\nSelect 'No' for proxy/VPN/single interface setup" 12 58); then
+    echo -e "${DGN}Using WAN MAC Address: ${BGN}${WAN_MAC}${CL}"
+    if ! grep -q "^iface ${WAN_BRG}" /etc/network/interfaces; then
+      msg_error "Bridge '${WAN_BRG}' does not exist in /etc/network/interfaces"
+      exit
+    else
+      echo -e "${DGN}Using WAN Bridge: ${BGN}${WAN_BRG}${CL}"
+    fi
   else
-    echo -e "${DGN}Using WAN Bridge: ${BGN}${WAN_BRG}${CL}"
+    echo -e "${DGN}WAN Bridge: ${BGN}Disabled (Single interface mode)${CL}"
+    WAN_BRG=""
   fi
   echo -e "${DGN}Using Interface MTU Size: ${BGN}Default${CL}"
   echo -e "${DGN}Start VM when completed: ${BGN}yes${CL}"
@@ -652,8 +658,12 @@ qm start $VMID
 sleep 90
 send_line_to_vm "root"
 send_line_to_vm "fetch https://raw.githubusercontent.com/opnsense/update/master/src/bootstrap/opnsense-bootstrap.sh.in"
-qm set $VMID \
-  -net1 virtio,bridge=${WAN_BRG},macaddr=${WAN_MAC} &>/dev/null
+if [ -n "$WAN_BRG" ]; then
+  msg_info "Adding WAN interface"
+  qm set $VMID \
+    -net1 virtio,bridge=${WAN_BRG},macaddr=${WAN_MAC} &>/dev/null
+  msg_ok "WAN interface added"
+fi
 sleep 10
 send_line_to_vm "sh ./opnsense-bootstrap.sh.in -y -f -r 25.1"
 msg_ok "OPNsense VM is being installed, do not close the terminal, or the installation will fail."
@@ -691,7 +701,7 @@ else
 fi
 #we need to wait for the Config changes to be saved
 sleep 20
-if [ "$WAN_IP_ADDR" != "" ]; then
+if [ -n "$WAN_BRG" ] && [ "$WAN_IP_ADDR" != "" ]; then
   send_line_to_vm "2"
   send_line_to_vm "2"
   send_line_to_vm "n"
