@@ -183,7 +183,7 @@ function wait_for_opnsense_ready() {
   local elapsed=0
   local check_interval=10
 
-  msg_info "Waiting for OPNsense installation to complete (this may take 15-20 minutes)"
+  msg_ok "Waiting for OPNsense installation to complete (this may take 15-20 minutes)"
 
   while [ $elapsed -lt $max_wait ]; do
     local monitor_output=$(qm monitor $vmid <<< "info status" 2>/dev/null || echo "")
@@ -742,7 +742,7 @@ if [ -n "$WAN_BRG" ]; then
   sleep 5  # Brief pause after adding network interface
 fi
 send_line_to_vm "sh ./opnsense-bootstrap.sh.in -y -f -r 25.1"
-msg_info "OPNsense installation started (do not close the terminal)"
+msg_ok "OPNsense VM is being installed, do not close the terminal, or the installation will fail."
 #Wait for the OPNsense build process to finish
 wait_for_opnsense_ready $VMID 1200
 send_line_to_vm "root"
