@@ -137,7 +137,7 @@ function send_line_to_vm() {
     "U") character="shift-u" ;;
     "V") character="shift-v" ;;
     "W") character="shift-w" ;;
-    "X") character="shift=x" ;;
+    "X") character="shift-x" ;;
     "Y") character="shift-y" ;;
     "Z") character="shift-z" ;;
     "!") character="shift-1" ;;
@@ -156,8 +156,98 @@ function send_line_to_vm() {
   qm sendkey $VMID ret
 }
 
-TEMP_DIR=$(mktemp -d)
-pushd $TEMP_DIR >/dev/null
+function wait_for_vm_running() {
+  local vmid=$1
+  local max_wait=${2:-300}  # Default 5 minutes
+  local elapsed=0
+
+  msg_info "Waiting for VM $vmid to start"
+
+  while [ $elapsed -lt $max_wait ]; do
+    local status=$(qm status $vmid 2>/dev/null | awk '{print $2}')
+    if [ "$status" = "running" ]; then
+      msg_ok "VM $vmid is running"
+      return 0
+    fi
+    sleep 5
+    elapsed=$((elapsed + 5))
+  done
+
+  msg_error "VM $vmid failed to start within ${max_wait}s"
+  return 1
+}
+
+function wait_for_bootstrap_download() {
+  local vmid=$1
+  local max_wait=${2:-60}  # Default 1 minute
+  local elapsed=0
+
+  msg_info "Waiting for bootstrap script download"
+
+  while [ $elapsed -lt $max_wait ]; do
+    local console_output=$(qm terminal $vmid -iface serial0 -cmd 'echo' 2>/dev/null || echo "")
+
+    if echo "$console_output" | grep -q "opnsense-bootstrap.sh.in"; then
+      msg_ok "Bootstrap script downloaded successfully"
+      return 0
+    fi
+
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+
+  msg_error "Bootstrap download verification timeout after ${max_wait}s"
+  return 1
+}
+
+function wait_for_opnsense_ready() {
+  local vmid=$1
+  local max_wait=${2:-1200}  # Default 20 minutes
+  local elapsed=0
+  local check_interval=10
+
+  msg_info "Waiting for OPNsense installation to complete (this may take 15-20 minutes)"
+
+  while [ $elapsed -lt $max_wait ]; do
+    local monitor_output=$(qm monitor $vmid <<< "info status" 2>/dev/null || echo "")
+
+    if timeout 2 qm terminal $vmid -iface serial0 2>/dev/null | grep -q "OPNsense.*localdomain"; then
+      msg_ok "OPNsense installation completed successfully"
+      return 0
+    fi
+
+    if [ $((elapsed % 60)) -eq 0 ] && [ $elapsed -gt 0 ]; then
+      echo -ne "${BFR} ${HOLD} ${YW}Still installing... ${elapsed}s elapsed (max ${max_wait}s)${CL}\r"
+    fi
+
+    sleep $check_interval
+    elapsed=$((elapsed + check_interval))
+  done
+
+  msg_error "OPNsense installation timeout after ${max_wait}s"
+  return 1
+}
+
+function wait_for_config_saved() {
+  local vmid=$1
+  local max_wait=${2:-30} # Default 30 seconds
+  local elapsed=0
+
+  msg_info "Waiting for configuration to be saved"
+
+  while [ $elapsed -lt $max_wait ]; do
+    if timeout 2 qm terminal $vmid -iface serial0 2>/dev/null | grep -qE "(Enter an option|0\).*Logout)"; then
+      msg_ok "Configuration saved successfully"
+      return 0
+    fi
+
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+
+  msg_error "Config save verification timeout after ${max_wait}s"
+  return 1
+}
 
 if (whiptail --backtitle "Proxmox VE Helper Scripts" --title "OPNsense VM" --yesno "This will create a New OPNsense VM. Proceed?" 10 58); then
   :
@@ -374,7 +464,7 @@ function advanced_settings() {
   fi
 
   if VM_NAME=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set Hostname" 8 58 OPNsense --title "HOSTNAME" --cancel-button Exit-Script 3>&1 1>&2 2>&3); then
-    if [ -z $VM_NAME ]; then
+    if [ -z "$VM_NAME" ]; then
       HN="OPNsense"
     else
       HN=$(echo ${VM_NAME,,} | tr -d ' ')
@@ -385,7 +475,7 @@ function advanced_settings() {
   fi
 
   if CORE_COUNT=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Allocate CPU Cores" 8 58 4 --title "CORE COUNT" --cancel-button Exit-Script 3>&1 1>&2 2>&3); then
-    if [ -z $CORE_COUNT ]; then
+    if [ -z "$CORE_COUNT" ]; then
       CORE_COUNT="2"
     fi
     echo -e "${DGN}Allocated Cores: ${BGN}$CORE_COUNT${CL}"
@@ -661,22 +751,24 @@ qm set $VMID \
 msg_ok "Bridge interfaces have been successfully added."
 
 msg_ok "Created a OPNsense VM ${CL}${BL}(${HN})"
-msg_ok "Starting OPNsense VM (Patience this takes 20-30 minutes)"
+msg_info "Starting OPNsense VM"
 qm start $VMID
-sleep 90
+wait_for_vm_running $VMID 300
+sleep 30  # Wait for FreeBSD boot process
 send_line_to_vm "root"
 send_line_to_vm "fetch https://raw.githubusercontent.com/opnsense/update/master/src/bootstrap/opnsense-bootstrap.sh.in"
+wait_for_bootstrap_download $VMID 60
 if [ -n "$WAN_BRG" ]; then
   msg_info "Adding WAN interface"
   qm set $VMID \
     -net1 virtio,bridge=${WAN_BRG},macaddr=${WAN_MAC} &>/dev/null
   msg_ok "WAN interface added"
+  sleep 5  # Brief pause after adding network interface
 fi
-sleep 10
 send_line_to_vm "sh ./opnsense-bootstrap.sh.in -y -f -r 25.1"
-msg_ok "OPNsense VM is being installed, do not close the terminal, or the installation will fail."
-#We need to wait for the OPNsense build proccess to finish, this takes a few minutes
-sleep 1000
+msg_info "OPNsense installation started (do not close the terminal)"
+#Wait for the OPNsense build process to finish
+wait_for_opnsense_ready $VMID 1200
 send_line_to_vm "root"
 send_line_to_vm "opnsense"
 send_line_to_vm "2"
@@ -707,8 +799,8 @@ else
   send_line_to_vm "n"
   send_line_to_vm "n"
 fi
-#we need to wait for the Config changes to be saved
-sleep 20
+#Wait for config changes to be saved
+wait_for_config_saved $VMID 30
 if [ -n "$WAN_BRG" ] && [ "$WAN_IP_ADDR" != "" ]; then
   send_line_to_vm "2"
   send_line_to_vm "2"
@@ -723,8 +815,10 @@ if [ -n "$WAN_BRG" ] && [ "$WAN_IP_ADDR" != "" ]; then
   send_line_to_vm "n"
   send_line_to_vm "n"
   send_line_to_vm "n"
+  #Wait for WAN config to be saved
+  wait_for_config_saved $VMID 30
 fi
-sleep 10
+sleep 5  # Brief pause before logout
 send_line_to_vm "0"
 msg_ok "Started OPNsense VM"
 
