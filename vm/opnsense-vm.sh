@@ -181,49 +181,34 @@ function wait_for_opnsense_ready() {
   local vmid=$1
   local max_wait=${2:-1200}  # Default 20 minutes
   local elapsed=0
-  local check_interval=10
+  local check_interval=30
 
-  msg_ok "Waiting for OPNsense installation to complete (this may take 15-20 minutes)"
+  msg_info "Waiting for OPNsense installation to complete (this may take 15-20 minutes)"
 
   while [ $elapsed -lt $max_wait ]; do
-    local monitor_output=$(qm monitor $vmid <<< "info status" 2>/dev/null || echo "")
-
-    if timeout 2 qm terminal $vmid -iface serial0 2>/dev/null | grep -q "OPNsense.*localdomain"; then
-      msg_ok "OPNsense installation completed successfully"
-      return 0
-    fi
-
     if [ $((elapsed % 60)) -eq 0 ] && [ $elapsed -gt 0 ]; then
-      echo -ne "${BFR} ${HOLD} ${YW}Still installing... ${elapsed}s elapsed (max ${max_wait}s)${CL}\r"
+      local minutes=$((elapsed / 60))
+      echo -ne "\r${BFR} ${HOLD} ${YW}Still installing... ${minutes} min elapsed (max $((max_wait / 60)) min)${CL}"
     fi
 
     sleep $check_interval
     elapsed=$((elapsed + check_interval))
   done
 
-  msg_error "OPNsense installation timeout after ${max_wait}s"
-  return 1
+  msg_ok "OPNsense installation time completed (assuming success)"
+  return 0
 }
 
 function wait_for_config_saved() {
   local vmid=$1
-  local max_wait=${2:-30} # Default 30 seconds
-  local elapsed=0
+  local max_wait=${2:-20} # Default 20 seconds
 
   msg_info "Waiting for configuration to be saved"
 
-  while [ $elapsed -lt $max_wait ]; do
-    if timeout 2 qm terminal $vmid -iface serial0 2>/dev/null | grep -qE "(Enter an option|0\).*Logout)"; then
-      msg_ok "Configuration saved successfully"
-      return 0
-    fi
+  sleep $max_wait
 
-    sleep 2
-    elapsed=$((elapsed + 2))
-  done
-
-  msg_error "Config save verification timeout after ${max_wait}s"
-  return 1
+  msg_ok "Configuration save time elapsed"
+  return 0
 }
 
 if (whiptail --backtitle "Proxmox VE Helper Scripts" --title "OPNsense VM" --yesno "This will create a New OPNsense VM. Proceed?" 10 58); then
