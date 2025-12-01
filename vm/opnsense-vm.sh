@@ -177,29 +177,6 @@ function wait_for_vm_running() {
   return 1
 }
 
-function wait_for_bootstrap_download() {
-  local vmid=$1
-  local max_wait=${2:-60}  # Default 1 minute
-  local elapsed=0
-
-  msg_info "Waiting for bootstrap script download"
-
-  while [ $elapsed -lt $max_wait ]; do
-    local console_output=$(qm terminal $vmid -iface serial0 -cmd 'echo' 2>/dev/null || echo "")
-
-    if echo "$console_output" | grep -q "opnsense-bootstrap.sh.in"; then
-      msg_ok "Bootstrap script downloaded successfully"
-      return 0
-    fi
-
-    sleep 2
-    elapsed=$((elapsed + 2))
-  done
-
-  msg_error "Bootstrap download verification timeout after ${max_wait}s"
-  return 1
-}
-
 function wait_for_opnsense_ready() {
   local vmid=$1
   local max_wait=${2:-1200}  # Default 20 minutes
