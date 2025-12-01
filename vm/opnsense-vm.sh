@@ -757,7 +757,6 @@ wait_for_vm_running $VMID 300
 sleep 30  # Wait for FreeBSD boot process
 send_line_to_vm "root"
 send_line_to_vm "fetch https://raw.githubusercontent.com/opnsense/update/master/src/bootstrap/opnsense-bootstrap.sh.in"
-wait_for_bootstrap_download $VMID 60
 if [ -n "$WAN_BRG" ]; then
   msg_info "Adding WAN interface"
   qm set $VMID \
