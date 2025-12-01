@@ -177,6 +177,31 @@ function wait_for_vm_running() {
   return 1
 }
 
+function read_serial_output() {
+  local vmid=$1
+  local timeout=${2:-2}
+  local socket_path="/var/run/qemu-server/${vmid}.serial0"
+
+  # Check if socket exists
+  if [ ! -S "$socket_path" ]; then
+    return 1
+  fi
+
+  # Try with socat first (preferred method)
+  if command -v socat &>/dev/null; then
+    timeout $timeout socat - UNIX-CONNECT:${socket_path},nonblock 2>/dev/null || true
+    return 0
+  fi
+
+  # Fallback to nc if socat not available
+  if command -v nc &>/dev/null; then
+    timeout $timeout nc -U $socket_path 2>/dev/null || true
+    return 0
+  fi
+
+  return 1
+}
+
 function wait_for_opnsense_ready() {
   local vmid=$1
   local max_wait=${2:-1200}  # Default 20 minutes
@@ -186,6 +211,17 @@ function wait_for_opnsense_ready() {
   msg_info "Waiting for OPNsense installation to complete (this may take 15-20 minutes)"
 
   while [ $elapsed -lt $max_wait ]; do
+    # Read serial output non-interactively
+    local output=$(read_serial_output $vmid 2)
+
+    # Check for signs that OPNsense installation is complete
+    # Look for the login prompt or main menu
+    if echo "$output" | grep -qiE "(login:|Username:|FreeBSD.*OPNsense|Enter an option)"; then
+      msg_ok "OPNsense installation completed successfully"
+      return 0
+    fi
+
+    # Progress feedback every minute
     if [ $((elapsed % 60)) -eq 0 ] && [ $elapsed -gt 0 ]; then
       local minutes=$((elapsed / 60))
       echo -ne "\r${BFR} ${HOLD} ${YW}Still installing... ${minutes} min elapsed (max $((max_wait / 60)) min)${CL}"
@@ -195,19 +231,67 @@ function wait_for_opnsense_ready() {
     elapsed=$((elapsed + check_interval))
   done
 
-  msg_ok "OPNsense installation time completed (assuming success)"
+  msg_error "OPNsense installation timeout after $((max_wait / 60)) minutes"
+  return 1
+}
+
+function wait_for_bootstrap_download() {
+  local vmid=$1
+  local max_wait=${2:-60} # Default 60 seconds
+  local elapsed=0
+  local check_interval=3
+
+  msg_info "Waiting for bootstrap script download"
+
+  while [ $elapsed -lt $max_wait ]; do
+    # Read serial output non-interactively
+    local output=$(read_serial_output $vmid 2)
+
+    # Check for successful download indicators
+    if echo "$output" | grep -qiE "(opnsense-bootstrap\.sh\.in.*100%|opnsense-bootstrap\.sh\.in.*saved|root@freebsd)"; then
+      msg_ok "Bootstrap script downloaded successfully"
+      return 0
+    fi
+
+    # Check for download errors
+    if echo "$output" | grep -qiE "(fetch.*failed|unable to fetch|no route to host)"; then
+      msg_error "Bootstrap download failed - check network connectivity"
+      return 1
+    fi
+
+    sleep $check_interval
+    elapsed=$((elapsed + check_interval))
+  done
+
+  # Timeout - continue anyway but warn
+  msg_ok "Bootstrap download time elapsed (continuing)"
   return 0
 }
 
 function wait_for_config_saved() {
   local vmid=$1
-  local max_wait=${2:-20} # Default 20 seconds
+  local max_wait=${2:-30} # Default 30 seconds
+  local elapsed=0
+  local check_interval=2
 
   msg_info "Waiting for configuration to be saved"
 
-  sleep $max_wait
+  while [ $elapsed -lt $max_wait ]; do
+    # Read serial output non-interactively
+    local output=$(read_serial_output $vmid 2)
 
-  msg_ok "Configuration save time elapsed"
+    # Check if we're back at the main menu (config was saved)
+    if echo "$output" | grep -qiE "(Enter an option|0\).*Logout)"; then
+      msg_ok "Configuration saved successfully"
+      return 0
+    fi
+
+    sleep $check_interval
+    elapsed=$((elapsed + check_interval))
+  done
+
+  # Even if we timeout, continue (might still work)
+  msg_ok "Configuration save time elapsed (continuing)"
   return 0
 }
 
@@ -719,6 +803,7 @@ wait_for_vm_running $VMID 300
 sleep 30  # Wait for FreeBSD boot process
 send_line_to_vm "root"
 send_line_to_vm "fetch https://raw.githubusercontent.com/opnsense/update/master/src/bootstrap/opnsense-bootstrap.sh.in"
+wait_for_bootstrap_download $VMID 60
 if [ -n "$WAN_BRG" ]; then
   msg_info "Adding WAN interface"
   qm set $VMID \
