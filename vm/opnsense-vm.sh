@@ -84,66 +84,6 @@ function cleanup() {
   rm -rf $TEMP_DIR
 }
 
-function get_freebsd_mirror() {
-  msg_info "Detecting best FreeBSD mirror for your region"
-
-  local COUNTRY=$(curl -s --max-time 3 https://ipapi.co/country/ 2>/dev/null)
-
-  if [ -z "$COUNTRY" ]; then
-    COUNTRY=$(curl -s --max-time 3 https://ipinfo.io/country 2>/dev/null)
-  fi
-
-  if [ -z "$COUNTRY" ]; then
-    COUNTRY="US"
-  fi
-
-  local MIRROR
-  case $COUNTRY in
-    BR)
-      MIRROR="https://ftp.br.freebsd.org/pub/FreeBSD"
-      msg_ok "Using Brazilian mirror (ftp.br.freebsd.org)"
-      ;;
-    AR|UY|CL|PY)
-      MIRROR="https://ftp.ar.freebsd.org/pub/FreeBSD"
-      msg_ok "Using Argentina mirror (ftp.ar.freebsd.org)"
-      ;;
-    DE|AT|CH)
-      MIRROR="https://ftp.de.freebsd.org/pub/FreeBSD"
-      msg_ok "Using German mirror (ftp.de.freebsd.org)"
-      ;;
-    GB|IE)
-      MIRROR="https://ftp.uk.freebsd.org/pub/FreeBSD"
-      msg_ok "Using UK mirror (ftp.uk.freebsd.org)"
-      ;;
-    FR|BE|LU)
-      MIRROR="https://ftp.fr.freebsd.org/pub/FreeBSD"
-      msg_ok "Using French mirror (ftp.fr.freebsd.org)"
-      ;;
-    JP|KR)
-      MIRROR="https://ftp.jp.freebsd.org/pub/FreeBSD"
-      msg_ok "Using Japanese mirror (ftp.jp.freebsd.org)"
-      ;;
-    CN|TW|HK)
-      MIRROR="https://ftp.cn.freebsd.org/pub/FreeBSD"
-      msg_ok "Using Chinese mirror (ftp.cn.freebsd.org)"
-      ;;
-    AU|NZ)
-      MIRROR="https://ftp.au.freebsd.org/pub/FreeBSD"
-      msg_ok "Using Australian mirror (ftp.au.freebsd.org)"
-      ;;
-    ZA)
-      MIRROR="https://ftp.za.freebsd.org/pub/FreeBSD"
-      msg_ok "Using South African mirror (ftp.za.freebsd.org)"
-      ;;
-    *)
-      MIRROR="https://download.freebsd.org"
-      msg_ok "Using main FreeBSD mirror (download.freebsd.org)"
-      ;;
-  esac
-
-  echo "$MIRROR"
-}
-
 TEMP_DIR=$(mktemp -d)
 pushd $TEMP_DIR >/dev/null
 function send_line_to_vm() {
@@ -641,8 +581,7 @@ fi
 msg_ok "Using ${CL}${BL}$STORAGE${CL} ${GN}for Storage Location."
 msg_ok "Virtual Machine ID is ${CL}${BL}$VMID${CL}."
 msg_info "Retrieving the URL for the OPNsense Qcow2 Disk Image"
-MIRROR=$(get_freebsd_mirror)
-URL="${MIRROR}/releases/VM-IMAGES/14.2-RELEASE/amd64/Latest/FreeBSD-14.2-RELEASE-amd64.qcow2.xz"
+URL="https://download.freebsd.org/releases/VM-IMAGES/14.2-RELEASE/amd64/Latest/FreeBSD-14.2-RELEASE-amd64.qcow2.xz"
 msg_ok "Download URL: ${CL}${BL}${URL}${CL}"
 curl -f#SL -o "$(basename "$URL")" "$URL"
 echo -en "\e[1A\e[0K"
