@@ -237,26 +237,42 @@ function wait_for_opnsense_ready() {
 
 function wait_for_bootstrap_download() {
   local vmid=$1
-  local max_wait=${2:-60} # Default 60 seconds
+  local max_wait=${2:-120} # Increased to 120 seconds
   local elapsed=0
   local check_interval=3
+  local last_output=""
 
   msg_info "Waiting for bootstrap script download"
 
   while [ $elapsed -lt $max_wait ]; do
     # Read serial output non-interactively
-    local output=$(read_serial_output $vmid 2)
+    local output=$(read_serial_output $vmid 3)
+
+    # Show output changes for better feedback
+    if [ -n "$output" ] && [ "$output" != "$last_output" ]; then
+      echo -e "\n${DGN}[Serial Output]${CL}"
+      echo "$output" | tail -10
+      last_output="$output"
+    fi
 
     # Check for successful download indicators
-    if echo "$output" | grep -qiE "(opnsense-bootstrap\.sh\.in.*100%|opnsense-bootstrap\.sh\.in.*saved|root@freebsd)"; then
+    # Look for: fetch completion, file saved, KB/s indicators, or prompt return
+    if echo "$output" | grep -qiE "(100%|saved|[0-9]+ bytes|freebsd#|root@FreeBSD)"; then
       msg_ok "Bootstrap script downloaded successfully"
       return 0
     fi
 
     # Check for download errors
-    if echo "$output" | grep -qiE "(fetch.*failed|unable to fetch|no route to host)"; then
+    if echo "$output" | grep -qiE "(fetch.*failed|unable to fetch|no route to host|not found|error)"; then
       msg_error "Bootstrap download failed - check network connectivity"
+      echo -e "${RD}Error details:${CL}"
+      echo "$output" | grep -iE "(failed|unable|error)" | tail -5
       return 1
+    fi
+
+    # Progress feedback every 15 seconds
+    if [ $((elapsed % 15)) -eq 0 ] && [ $elapsed -gt 0 ]; then
+      echo -ne "\r${BFR} ${HOLD} ${YW}Still waiting... ${elapsed}s elapsed (max ${max_wait}s)${CL}"
     fi
 
     sleep $check_interval
