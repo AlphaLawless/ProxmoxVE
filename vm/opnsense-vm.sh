@@ -673,7 +673,7 @@ fi
 send_line_to_vm "sh ./opnsense-bootstrap.sh.in -y -f -r 25.1"
 msg_ok "OPNsense VM is being installed, do not close the terminal, or the installation will fail."
 #Wait for the OPNsense build process to finish
-wait_for_opnsense_ready $VMID 1200
+sleep 1000
 send_line_to_vm "root"
 send_line_to_vm "opnsense"
 send_line_to_vm "2"
