@@ -156,161 +156,6 @@ function send_line_to_vm() {
   qm sendkey $VMID ret
 }
 
-function wait_for_vm_running() {
-  local vmid=$1
-  local max_wait=${2:-300}  # Default 5 minutes
-  local elapsed=0
-
-  msg_info "Waiting for VM $vmid to start"
-
-  while [ $elapsed -lt $max_wait ]; do
-    local status=$(qm status $vmid 2>/dev/null | awk '{print $2}')
-    if [ "$status" = "running" ]; then
-      msg_ok "VM $vmid is running"
-      return 0
-    fi
-    sleep 5
-    elapsed=$((elapsed + 5))
-  done
-
-  msg_error "VM $vmid failed to start within ${max_wait}s"
-  return 1
-}
-
-function read_serial_output() {
-  local vmid=$1
-  local timeout=${2:-2}
-  local socket_path="/var/run/qemu-server/${vmid}.serial0"
-
-  # Check if socket exists
-  if [ ! -S "$socket_path" ]; then
-    return 1
-  fi
-
-  # Try with socat first (preferred method)
-  if command -v socat &>/dev/null; then
-    timeout $timeout socat - UNIX-CONNECT:${socket_path},nonblock 2>/dev/null || true
-    return 0
-  fi
-
-  # Fallback to nc if socat not available
-  if command -v nc &>/dev/null; then
-    timeout $timeout nc -U $socket_path 2>/dev/null || true
-    return 0
-  fi
-
-  return 1
-}
-
-function wait_for_opnsense_ready() {
-  local vmid=$1
-  local max_wait=${2:-1200}  # Default 20 minutes
-  local elapsed=0
-  local check_interval=30
-
-  msg_info "Waiting for OPNsense installation to complete (this may take 15-20 minutes)"
-
-  while [ $elapsed -lt $max_wait ]; do
-    # Read serial output non-interactively
-    local output=$(read_serial_output $vmid 2)
-
-    # Check for signs that OPNsense installation is complete
-    # Look for the login prompt or main menu
-    if echo "$output" | grep -qiE "(login:|Username:|FreeBSD.*OPNsense|Enter an option)"; then
-      msg_ok "OPNsense installation completed successfully"
-      return 0
-    fi
-
-    # Progress feedback every minute
-    if [ $((elapsed % 60)) -eq 0 ] && [ $elapsed -gt 0 ]; then
-      local minutes=$((elapsed / 60))
-      echo -ne "\r${BFR} ${HOLD} ${YW}Still installing... ${minutes} min elapsed (max $((max_wait / 60)) min)${CL}"
-    fi
-
-    sleep $check_interval
-    elapsed=$((elapsed + check_interval))
-  done
-
-  msg_error "OPNsense installation timeout after $((max_wait / 60)) minutes"
-  return 1
-}
-
-function wait_for_bootstrap_download() {
-  local vmid=$1
-  local max_wait=${2:-120} # Increased to 120 seconds
-  local elapsed=0
-  local check_interval=3
-  local last_output=""
-
-  msg_info "Waiting for bootstrap script download"
-
-  while [ $elapsed -lt $max_wait ]; do
-    # Read serial output non-interactively
-    local output=$(read_serial_output $vmid 3)
-
-    # Show output changes for better feedback
-    if [ -n "$output" ] && [ "$output" != "$last_output" ]; then
-      echo -e "\n${DGN}[Serial Output]${CL}"
-      echo "$output" | tail -10
-      last_output="$output"
-    fi
-
-    # Check for successful download indicators
-    # Look for: fetch completion, file saved, KB/s indicators, or prompt return
-    if echo "$output" | grep -qiE "(100%|saved|[0-9]+ bytes|freebsd#|root@FreeBSD)"; then
-      msg_ok "Bootstrap script downloaded successfully"
-      return 0
-    fi
-
-    # Check for download errors
-    if echo "$output" | grep -qiE "(fetch.*failed|unable to fetch|no route to host|not found|error)"; then
-      msg_error "Bootstrap download failed - check network connectivity"
-      echo -e "${RD}Error details:${CL}"
-      echo "$output" | grep -iE "(failed|unable|error)" | tail -5
-      return 1
-    fi
-
-    # Progress feedback every 15 seconds
-    if [ $((elapsed % 15)) -eq 0 ] && [ $elapsed -gt 0 ]; then
-      echo -ne "\r${BFR} ${HOLD} ${YW}Still waiting... ${elapsed}s elapsed (max ${max_wait}s)${CL}"
-    fi
-
-    sleep $check_interval
-    elapsed=$((elapsed + check_interval))
-  done
-
-  # Timeout - continue anyway but warn
-  msg_ok "Bootstrap download time elapsed (continuing)"
-  return 0
-}
-
-function wait_for_config_saved() {
-  local vmid=$1
-  local max_wait=${2:-30} # Default 30 seconds
-  local elapsed=0
-  local check_interval=2
-
-  msg_info "Waiting for configuration to be saved"
-
-  while [ $elapsed -lt $max_wait ]; do
-    # Read serial output non-interactively
-    local output=$(read_serial_output $vmid 2)
-
-    # Check if we're back at the main menu (config was saved)
-    if echo "$output" | grep -qiE "(Enter an option|0\).*Logout)"; then
-      msg_ok "Configuration saved successfully"
-      return 0
-    fi
-
-    sleep $check_interval
-    elapsed=$((elapsed + check_interval))
-  done
-
-  # Even if we timeout, continue (might still work)
-  msg_ok "Configuration save time elapsed (continuing)"
-  return 0
-}
-
 if (whiptail --backtitle "Proxmox VE Helper Scripts" --title "OPNsense VM" --yesno "This will create a New OPNsense VM. Proceed?" 10 58); then
   :
 else
@@ -813,13 +658,11 @@ qm set $VMID \
 msg_ok "Bridge interfaces have been successfully added."
 
 msg_ok "Created a OPNsense VM ${CL}${BL}(${HN})"
-msg_info "Starting OPNsense VM"
+msg_ok "Starting OPNsense VM (Patience this takes 20-30 minutes)"
 qm start $VMID
-wait_for_vm_running $VMID 300
-sleep 30  # Wait for FreeBSD boot process
+sleep 90
 send_line_to_vm "root"
 send_line_to_vm "fetch https://raw.githubusercontent.com/opnsense/update/master/src/bootstrap/opnsense-bootstrap.sh.in"
-wait_for_bootstrap_download $VMID 60
 if [ -n "$WAN_BRG" ]; then
   msg_info "Adding WAN interface"
   qm set $VMID \
@@ -862,7 +705,7 @@ else
   send_line_to_vm "n"
 fi
 #Wait for config changes to be saved
-wait_for_config_saved $VMID 30
+sleep 20
 if [ -n "$WAN_BRG" ] && [ "$WAN_IP_ADDR" != "" ]; then
   send_line_to_vm "2"
   send_line_to_vm "2"
@@ -877,10 +720,8 @@ if [ -n "$WAN_BRG" ] && [ "$WAN_IP_ADDR" != "" ]; then
   send_line_to_vm "n"
   send_line_to_vm "n"
   send_line_to_vm "n"
-  #Wait for WAN config to be saved
-  wait_for_config_saved $VMID 30
 fi
-sleep 5  # Brief pause before logout
+sleep 10
 send_line_to_vm "0"
 msg_ok "Started OPNsense VM"
 
